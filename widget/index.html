@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Smart Lead Form Widget Demo</title>
+    <link rel="stylesheet" href="./smart-form.css">
+  </head>
+  <body>
+    <main class="demo-page">
+      <h1>Демо-сайт нотариуса</h1>
+      <p>Проверьте работу умной формы заявки.</p>
+    </main>
+
+    <script>
+      window.SmartLeadFormConfig = {
+        apiBaseUrl: "http://localhost:8000",
+        clientId: "notary_demo"
+      };
+    </script>
+    <script src="./smart-form.js"></script>
+  </body>
+</html>

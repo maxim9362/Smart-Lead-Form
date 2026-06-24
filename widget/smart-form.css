@@ -1,0 +1,264 @@
+/* Styles for the embeddable Smart Lead Form widget. */
+
+.slf-widget-button {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 9998;
+  box-sizing: border-box;
+  max-width: min(320px, calc(100vw - 32px));
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.24);
+  font: 600 15px/1.2 Arial, sans-serif;
+  color: #ffffff;
+  background: #0f766e;
+  cursor: pointer;
+}
+
+.slf-widget-button:hover {
+  background: #115e59;
+}
+
+.slf-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.56);
+}
+
+.slf-overlay.slf-is-open {
+  display: flex;
+}
+
+.slf-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(420px, 100%);
+  max-height: min(720px, calc(100vh - 40px));
+  overflow: hidden;
+  border-radius: 8px;
+  box-shadow: 0 22px 70px rgba(15, 23, 42, 0.32);
+  font: 14px/1.45 Arial, sans-serif;
+  color: #182230;
+  background: #ffffff;
+}
+
+.slf-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.slf-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.slf-close-button {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  font-size: 20px;
+  line-height: 1;
+  color: #344054;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.slf-body {
+  overflow-y: auto;
+  padding: 18px;
+}
+
+.slf-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 18px;
+  border-top: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.slf-heading {
+  margin: 0 0 10px;
+  font-size: 21px;
+  line-height: 1.25;
+}
+
+.slf-text {
+  margin: 0 0 16px;
+  color: #475467;
+}
+
+.slf-question {
+  margin: 0 0 16px;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.slf-progress {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: #667085;
+}
+
+.slf-options {
+  display: grid;
+  gap: 8px;
+}
+
+.slf-option-button {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 13px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  text-align: left;
+  font: 500 14px/1.35 Arial, sans-serif;
+  color: #182230;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.slf-option-button:hover,
+.slf-option-button.slf-selected {
+  border-color: #0f766e;
+  background: #ecfdf3;
+}
+
+.slf-input,
+.slf-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 13px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  font: 14px/1.4 Arial, sans-serif;
+  color: #182230;
+  background: #ffffff;
+}
+
+.slf-textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.slf-input:focus,
+.slf-textarea:focus {
+  outline: 2px solid rgba(15, 118, 110, 0.2);
+  border-color: #0f766e;
+}
+
+.slf-error {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #991b1b;
+  background: #fef2f2;
+}
+
+.slf-estimate {
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  background: #f0f9ff;
+}
+
+.slf-estimate-value {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.slf-summary {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.slf-summary-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.slf-summary-label {
+  color: #667085;
+}
+
+.slf-summary-value {
+  color: #182230;
+}
+
+.slf-button {
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 10px 14px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  font: 600 14px/1.2 Arial, sans-serif;
+  color: #344054;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.slf-button:hover {
+  background: #f2f4f7;
+}
+
+.slf-button-primary {
+  border-color: #0f766e;
+  color: #ffffff;
+  background: #0f766e;
+}
+
+.slf-button-primary:hover {
+  background: #115e59;
+}
+
+.slf-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+@media (max-width: 520px) {
+  .slf-overlay {
+    align-items: flex-end;
+    padding: 10px;
+  }
+
+  .slf-modal {
+    max-height: calc(100vh - 20px);
+  }
+
+  .slf-footer {
+    flex-wrap: wrap;
+  }
+
+  .slf-button {
+    flex: 1 1 auto;
+  }
+
+  .slf-summary-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
