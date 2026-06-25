@@ -60,6 +60,7 @@ class LeadResponse(BaseModel):
     estimate_message: str | None
     disclaimer: str | None
     answers_json: dict[str, Any] | None
+    status: str
     created_at: datetime
     updated_at: datetime
 
@@ -69,3 +70,17 @@ class LeadResponse(BaseModel):
 class LeadListResponse(BaseModel):
     items: list[LeadResponse]
     total: int
+
+
+class LeadStatusUpdate(BaseModel):
+    status: str
+
+
+class LeadStatusUpdateResponse(BaseModel):
+    id: int
+    status: str
+
+
+class LeadDeleteResponse(BaseModel):
+    id: int
+    status: str

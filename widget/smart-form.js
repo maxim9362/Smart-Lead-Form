@@ -6,6 +6,9 @@
   var widgetConfig = window.SmartLeadFormConfig || {};
   var apiBaseUrl = widgetConfig.apiBaseUrl || "http://localhost:8000";
   var clientId = widgetConfig.clientId || "notary_demo";
+  var mode = widgetConfig.mode || "floating";
+  var containerId = widgetConfig.containerId || "smart-lead-form";
+  var isEmbedded = mode === "embedded";
 
   var state = {
     config: null,
@@ -13,9 +16,10 @@
     steps: [],
     visibleSteps: [],
     currentStepIndex: 0,
+    stepHistory: [],
     answers: {},
     estimate: null,
-    isOpen: false,
+    isOpen: isEmbedded,
     screen: "welcome",
     error: "",
     isSubmitting: false
@@ -99,6 +103,15 @@
         state.currentStepIndex = Math.max(state.visibleSteps.length - 1, 0);
       }
     }
+
+    var visibleKeys = state.visibleSteps.map(function (step) {
+      return step.key;
+    });
+    Object.keys(state.answers).forEach(function (key) {
+      if (visibleKeys.indexOf(key) === -1) {
+        delete state.answers[key];
+      }
+    });
   }
 
   function validateEmail(value) {
@@ -144,6 +157,10 @@
   }
 
   function closeModal() {
+    if (isEmbedded) {
+      return;
+    }
+
     state.isOpen = false;
     render();
   }
@@ -151,9 +168,30 @@
   function startForm() {
     state.screen = "question";
     state.currentStepIndex = 0;
+    state.stepHistory = [];
     state.error = "";
     updateVisibleSteps();
     render();
+  }
+
+  function resetForm(screen) {
+    state.currentStepIndex = 0;
+    state.stepHistory = [];
+    state.answers = {};
+    state.estimate = null;
+    state.error = "";
+    state.isSubmitting = false;
+    state.screen = screen || "welcome";
+    updateVisibleSteps();
+    render();
+  }
+
+  function cancelForm() {
+    if (!window.confirm(getText("cancel_confirm_text", "Отменить заполнение заявки? Введенные данные будут очищены."))) {
+      return;
+    }
+
+    resetForm("welcome");
   }
 
   function goBack() {
@@ -161,7 +199,15 @@
 
     if (state.screen === "estimate") {
       state.screen = "question";
-      state.currentStepIndex = Math.max(state.visibleSteps.length - 1, 0);
+      var previousFromEstimate = state.stepHistory.pop();
+      if (previousFromEstimate) {
+        var estimateBackIndex = state.visibleSteps.findIndex(function (step) {
+          return step.key === previousFromEstimate;
+        });
+        state.currentStepIndex = Math.max(estimateBackIndex, 0);
+      } else {
+        state.currentStepIndex = Math.max(state.visibleSteps.length - 1, 0);
+      }
       render();
       return;
     }
@@ -172,10 +218,14 @@
       return;
     }
 
-    if (state.currentStepIndex <= 0) {
+    var previousStepKey = state.stepHistory.pop();
+    if (!previousStepKey) {
       state.screen = "welcome";
     } else {
-      state.currentStepIndex -= 1;
+      var previousIndex = state.visibleSteps.findIndex(function (step) {
+        return step.key === previousStepKey;
+      });
+      state.currentStepIndex = previousIndex >= 0 ? previousIndex : 0;
     }
 
     render();
@@ -206,14 +256,21 @@
   }
 
   function goNext() {
+    var currentStep = state.visibleSteps[state.currentStepIndex];
     updateVisibleSteps();
 
     if (state.currentStepIndex < state.visibleSteps.length - 1) {
+      if (currentStep) {
+        state.stepHistory.push(currentStep.key);
+      }
       state.currentStepIndex += 1;
       render();
       return;
     }
 
+    if (currentStep) {
+      state.stepHistory.push(currentStep.key);
+    }
     calculateEstimate();
   }
 
@@ -247,12 +304,12 @@
         state.visibleSteps = config.visible_steps || state.steps.filter(function (step) {
           return stepIsVisible(step, state.answers);
         });
-        elements.openButton.textContent = getText("open_button_text", "Оставить заявку");
+        updateOpenButtonText();
         render();
       })
       .catch(function () {
         state.error = "Не удалось загрузить форму. Попробуйте позже.";
-        elements.openButton.textContent = "Оставить заявку";
+        updateOpenButtonText();
         render();
       });
   }
@@ -399,6 +456,11 @@
     elements.body.replaceChildren(fragment);
 
     var buttons = [];
+    var cancelButton = createElement("button", "slf-button slf-button-muted", getText("cancel_button_text", "Отменить"));
+    cancelButton.type = "button";
+    cancelButton.addEventListener("click", cancelForm);
+    buttons.push(cancelButton);
+
     var backButton = createElement("button", "slf-button", getText("back_button_text", "Назад"));
     backButton.type = "button";
     backButton.addEventListener("click", goBack);
@@ -432,12 +494,16 @@
     backButton.type = "button";
     backButton.addEventListener("click", goBack);
 
+    var cancelButton = createElement("button", "slf-button slf-button-muted", getText("cancel_button_text", "Отменить"));
+    cancelButton.type = "button";
+    cancelButton.addEventListener("click", cancelForm);
+
     var submitButton = createElement("button", "slf-button slf-button-primary", state.isSubmitting ? getText("loading_text", "Пожалуйста, подождите...") : getText("submit_button_text", "Отправить заявку"));
     submitButton.type = "button";
     submitButton.disabled = state.isSubmitting;
     submitButton.addEventListener("click", submitLead);
 
-    elements.footer.replaceChildren(backButton, submitButton);
+    elements.footer.replaceChildren(cancelButton, backButton, submitButton);
   }
 
   function addSummaryRow(container, label, value) {
@@ -455,7 +521,7 @@
     var fragment = document.createDocumentFragment();
     var summary = createElement("div", "slf-summary");
 
-    fragment.appendChild(createElement("h2", "slf-heading", getText("success_title", "Спасибо, заявка создана")));
+    fragment.appendChild(createElement("h2", "slf-heading slf-success", getText("success_title", "Спасибо, заявка создана")));
     fragment.appendChild(createElement("p", "slf-text", getText("success_text", "Ваша заявка отправлена.")));
     fragment.appendChild(createElement("h3", "slf-question", getText("summary_title", "Ваши данные")));
 
@@ -475,10 +541,26 @@
     fragment.appendChild(summary);
     elements.body.replaceChildren(fragment);
 
+    if (isEmbedded) {
+      var restartButton = createElement("button", "slf-button slf-button-primary", getText("new_request_button_text", "Новая заявка"));
+      restartButton.type = "button";
+      restartButton.addEventListener("click", function () {
+        resetForm("welcome");
+      });
+      elements.footer.replaceChildren(restartButton);
+      return;
+    }
+
+    var restartButton = createElement("button", "slf-button", getText("new_request_button_text", "Новая заявка"));
+    restartButton.type = "button";
+    restartButton.addEventListener("click", function () {
+      resetForm("welcome");
+    });
+
     var closeButton = createElement("button", "slf-button slf-button-primary", getText("close_button_text", "Закрыть"));
     closeButton.type = "button";
     closeButton.addEventListener("click", closeModal);
-    elements.footer.replaceChildren(closeButton);
+    elements.footer.replaceChildren(restartButton, closeButton);
   }
 
   function renderLoading() {
@@ -486,16 +568,28 @@
     elements.footer.replaceChildren();
   }
 
-  function render() {
-    elements.overlay.classList.toggle("slf-is-open", state.isOpen);
-    elements.openButton.textContent = getText("open_button_text", "Оставить заявку");
+  function updateOpenButtonText() {
+    if (elements.openButton) {
+      elements.openButton.textContent = getText("open_button_text", "Оставить заявку");
+    }
+  }
 
-    if (!state.isOpen) {
-      return;
+  function renderShell() {
+    if (elements.overlay) {
+      elements.overlay.classList.toggle("slf-is-open", state.isOpen);
+    }
+
+    updateOpenButtonText();
+
+    if (!isEmbedded && !state.isOpen) {
+      return false;
     }
 
     elements.title.textContent = state.config ? state.config.title : "Smart Lead Form";
+    return true;
+  }
 
+  function renderFormContent() {
     if (!state.config) {
       renderLoading();
       if (state.error) {
@@ -515,27 +609,58 @@
     }
   }
 
-  function buildWidget() {
+  function render() {
+    if (!renderShell()) {
+      return;
+    }
+
+    renderFormContent();
+  }
+
+  function buildCard(includeCloseButton) {
+    elements.card = createElement("div", "slf-card");
+    elements.header = createElement("div", "slf-form-header");
+    elements.title = createElement("h1", "slf-title", "Smart Lead Form");
+    elements.body = createElement("div", "slf-body");
+    elements.footer = createElement("div", "slf-actions");
+
+    elements.header.appendChild(elements.title);
+
+    if (includeCloseButton) {
+      elements.closeButton = createElement("button", "slf-close-button", "×");
+      elements.closeButton.type = "button";
+      elements.closeButton.setAttribute("aria-label", "Закрыть");
+      elements.closeButton.addEventListener("click", closeModal);
+      elements.header.appendChild(elements.closeButton);
+    }
+
+    elements.card.appendChild(elements.header);
+    elements.card.appendChild(elements.body);
+    elements.card.appendChild(elements.footer);
+    return elements.card;
+  }
+
+  function buildEmbeddedWidget() {
+    var container = document.getElementById(containerId);
+
+    if (!container) {
+      return false;
+    }
+
+    elements.root = createElement("div", "slf-embedded");
+    elements.root.appendChild(buildCard(false));
+    container.appendChild(elements.root);
+    return true;
+  }
+
+  function buildFloatingWidget() {
     elements.openButton = createElement("button", "slf-widget-button", "Оставить заявку");
     elements.openButton.type = "button";
     elements.openButton.addEventListener("click", openModal);
 
     elements.overlay = createElement("div", "slf-overlay");
     elements.modal = createElement("div", "slf-modal");
-    elements.header = createElement("div", "slf-header");
-    elements.title = createElement("h1", "slf-title", "Smart Lead Form");
-    elements.closeButton = createElement("button", "slf-close-button", "×");
-    elements.closeButton.type = "button";
-    elements.closeButton.setAttribute("aria-label", "Закрыть");
-    elements.closeButton.addEventListener("click", closeModal);
-    elements.body = createElement("div", "slf-body");
-    elements.footer = createElement("div", "slf-footer");
-
-    elements.header.appendChild(elements.title);
-    elements.header.appendChild(elements.closeButton);
-    elements.modal.appendChild(elements.header);
-    elements.modal.appendChild(elements.body);
-    elements.modal.appendChild(elements.footer);
+    elements.modal.appendChild(buildCard(true));
     elements.overlay.appendChild(elements.modal);
 
     elements.overlay.addEventListener("click", function (event) {
@@ -546,10 +671,22 @@
 
     document.body.appendChild(elements.openButton);
     document.body.appendChild(elements.overlay);
+    return true;
+  }
+
+  function buildWidget() {
+    if (isEmbedded) {
+      return buildEmbeddedWidget();
+    }
+
+    return buildFloatingWidget();
   }
 
   function init() {
-    buildWidget();
+    if (!buildWidget()) {
+      return;
+    }
+
     render();
     loadConfig();
   }

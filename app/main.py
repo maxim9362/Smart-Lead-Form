@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app.api.admin import router as admin_router
 from app.api.form import router as form_router
 from app.api.health import router as health_router
 from app.api.leads import router as leads_router
@@ -22,7 +23,6 @@ logger = logging.getLogger("uvicorn.error")
 
 def log_startup_links() -> None:
     base_url = settings.public_base_url.rstrip("/")
-    admin_url = f"{base_url}/api/leads?client_id={settings.default_client_id}"
 
     logger.info(
         "\n"
@@ -32,18 +32,17 @@ def log_startup_links() -> None:
         "Demo page:\n"
         "%s/widget/index.html\n"
         "\n"
-        "Admin API URL:\n"
+        "Admin page:\n"
+        "%s/widget/admin.html\n"
+        "\n"
+        "Temporary admin username from .env:\n"
         "%s\n"
         "\n"
-        "Admin API requires this header and will return 401 in a browser without it:\n"
-        "X-Admin-Api-Key: <your-admin-api-key>\n"
-        "\n"
-        "PowerShell example:\n"
-        "curl \"%s\" -H \"X-Admin-Api-Key: <your-admin-api-key>\"\n"
+        "Admin password is not printed to logs.\n"
         "============================================================",
         base_url,
-        admin_url,
-        admin_url,
+        base_url,
+        settings.admin_username,
     )
 
 
@@ -65,6 +64,7 @@ app.add_middleware(
 )
 
 app.include_router(health_router, prefix="/api")
+app.include_router(admin_router)
 app.include_router(form_router)
 app.include_router(leads_router)
 app.mount("/widget", StaticFiles(directory=WIDGET_DIR, html=True), name="widget")

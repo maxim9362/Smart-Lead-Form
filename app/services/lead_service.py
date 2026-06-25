@@ -11,6 +11,7 @@ from app.services.phone_validator import normalize_israeli_phone
 
 
 logger = logging.getLogger(__name__)
+ALLOWED_LEAD_STATUSES = {"new", "in_progress", "done", "cancelled"}
 
 
 def create_lead(db: Session, lead_data: LeadCreate) -> Lead:
@@ -41,6 +42,7 @@ def create_lead(db: Session, lead_data: LeadCreate) -> Lead:
         estimate_message=lead_data.estimate_message,
         disclaimer=lead_data.disclaimer,
         answers_json=lead_data.answers,
+        status="new",
     )
 
     db.add(lead)
@@ -71,3 +73,31 @@ def list_leads(
     items = query.order_by(Lead.created_at.desc()).offset(offset).limit(limit).all()
 
     return items, total
+
+
+def get_lead(db: Session, lead_id: int) -> Lead | None:
+    return db.query(Lead).filter(Lead.id == lead_id).first()
+
+
+def update_lead_status(db: Session, lead_id: int, status: str) -> Lead:
+    if status not in ALLOWED_LEAD_STATUSES:
+        raise ValueError("Invalid lead status")
+
+    lead = get_lead(db, lead_id)
+    if lead is None:
+        raise LookupError("Lead not found")
+
+    lead.status = status
+    db.add(lead)
+    db.commit()
+    db.refresh(lead)
+    return lead
+
+
+def delete_lead(db: Session, lead_id: int) -> None:
+    lead = get_lead(db, lead_id)
+    if lead is None:
+        raise LookupError("Lead not found")
+
+    db.delete(lead)
+    db.commit()

@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     owner_email: str | None = "test@example.com"
     allowed_origins: str = "http://localhost:8000,http://127.0.0.1:8000"
     admin_api_key: str | None = None
+    admin_username: str = "admin"
+    admin_password: str = "admin123"
     public_base_url: str = "http://localhost:8000"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
