@@ -38,6 +38,12 @@ class LeadCreateResponse(BaseModel):
     message: str
 
 
+class LeadUpdateResponse(BaseModel):
+    id: int
+    status: str
+    message: str
+
+
 class LeadResponse(BaseModel):
     id: int
     client_id: str

@@ -35,9 +35,9 @@
         "service_type": "notary_translation",
         "page_count": "4_10"
       },
-      "price_min": null,
-      "price_max": null,
-      "estimate_message": "Стоимость перевода 4–10 страниц нужно уточнить после проверки документа."
+      "price_min": 800,
+      "price_max": 2200,
+      "estimate_message": "Ориентировочная стоимость нотариального перевода 4–10 страниц. Точная сумма зависит от языка, объема и сложности документа."
     },
     {
       "id": "notary_translation_10_plus",
@@ -46,9 +46,9 @@
         "service_type": "notary_translation",
         "page_count": "10_plus"
       },
-      "price_min": null,
-      "price_max": null,
-      "estimate_message": "Стоимость перевода большого документа нужно уточнить после проверки объема и сложности."
+      "price_min": 2200,
+      "price_max": 5000,
+      "estimate_message": "Ориентировочная стоимость нотариального перевода большого документа. Точная сумма уточняется после проверки объема и сложности."
     },
     {
       "id": "signature_verification",

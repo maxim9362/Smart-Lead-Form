@@ -12,7 +12,7 @@
 - предварительно классифицировать обращение;
 - показать ориентировочную стоимость или сообщение, что цену нужно уточнить;
 - сохранить лид в PostgreSQL;
-- подготовить уведомление владельцу бизнеса.
+- подготовить уведомление владельцу бизнеса через stub в логах.
 
 ## Demo niche
 
@@ -30,11 +30,15 @@
 - условные вопросы `show_if` / `show_if_any`;
 - предварительная оценка стоимости по JSON rules;
 - сохранение заявок;
+- защита от повторной новой заявки в течение 24 часов;
+- редактирование уже созданной заявки из виджета;
 - валидация израильского телефона;
+- проверка удобного времени связи с учетом рабочих часов и Шабата;
 - email notification stub в лог;
 - embeddable widget через `script`;
 - CORS через `.env`;
 - раздача widget-файлов через backend.
+- визуальная admin page с логином/паролем, списком заявок, статусами и удалением.
 
 ## Что не входит в MVP
 
@@ -43,7 +47,6 @@
 - загрузка документов;
 - онлайн-оплата;
 - настоящая SMTP-отправка;
-- личный кабинет;
 - WordPress-плагин.
 
 ## Stack
@@ -58,13 +61,13 @@
 
 ## Структура проекта
 
-- `app/api` — HTTP endpoints: health, form API, leads API.
-- `app/models` — SQLAlchemy модели `Lead` и `FormSession`.
-- `app/services` — reusable-сервисы: form engine, pricing engine, lead service, phone validation, email stub.
+- `app/api` — HTTP endpoints: health, form API, leads API, admin auth API.
+- `app/models` — SQLAlchemy модели `Lead`, `FormSession`, `AdminUser`.
+- `app/services` — reusable-сервисы: form engine, pricing engine, lead service, phone validation, admin auth, email stub.
 - `app/clients/notary_demo` — JSON-конфиги первого demo-клиента.
 - `app/core` — настройки, database session, init_db, security-заглушка.
 - `app/schemas` — Pydantic-схемы API.
-- `widget` — embeddable frontend widget на vanilla HTML/CSS/JS.
+- `widget` — demo site, embeddable frontend widget и admin page на vanilla HTML/CSS/JS.
 - `migrations` — зарезервировано для будущих миграций.
 
 ## Быстрый запуск
@@ -113,9 +116,7 @@ docker compose up --build
 В консоли будут показаны полезные ссылки:
 
 - demo page;
-- API docs;
-- admin API;
-- health checks.
+- admin page.
 
 Базовый URL задается в `.env`:
 
@@ -160,8 +161,18 @@ http://localhost:8000/widget/index.html
 - выбрать `Русский → Иврит`;
 - выбрать `1 страница`;
 - заполнить контакты;
+- указать удобное время, например `завтра в 12:30`;
 - получить оценку `150–250 ₪`;
 - отправить заявку.
+
+После успешной отправки в этом же браузере новая заявка блокируется на 24 часа. Пользователь увидит сообщение, что заявка уже создана, и сможет изменить существующую заявку.
+
+Время связи:
+
+- можно писать `завтра в 12:30`;
+- `12%33` не пройдет как неправильный формат;
+- `22:55` не пройдет как нерабочее время;
+- в Шабат форма сообщает, что офис закрыт.
 
 ## Проверка API
 
@@ -203,8 +214,8 @@ curl -X POST "http://localhost:8000/api/leads" \
     "documents_ready": "scan",
     "name": "Максим",
     "phone": "0541234567",
-    "email": "test@example.com",
-    "preferred_contact_time": "после 13:00",
+    "email": null,
+    "preferred_contact_time": "завтра в 12:30",
     "comment": "Нужен перевод свидетельства",
     "estimated_price_min": 150,
     "estimated_price_max": 250,
@@ -223,11 +234,23 @@ curl -X POST "http://localhost:8000/api/leads" \
   }'
 ```
 
-Получить заявки:
+Войти в админку:
+
+```bash
+curl -X POST "http://localhost:8000/api/admin/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "client_id": "notary_demo",
+    "username": "admin",
+    "password": "admin123"
+  }'
+```
+
+Получить заявки через Bearer token из ответа login:
 
 ```bash
 curl "http://localhost:8000/api/leads?client_id=notary_demo" \
-  -H "X-Admin-Api-Key: change-me-admin-key"
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
 ## Подключение виджета на сайт
@@ -265,9 +288,28 @@ ALLOWED_ORIGINS=https://client-site.com,https://www.client-site.com
 ALLOWED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
 ```
 
-## Admin API key
+## Admin
 
-`GET /api/leads` защищен заголовком `X-Admin-Api-Key`.
+Визуальная админка:
+
+```text
+http://localhost:8000/widget/admin.html
+```
+
+Локальные demo-доступы из `.env.example`:
+
+```env
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=admin123
+```
+
+Визуальная админка сейчас предназначена для работы с заявками: просмотр, статусы и удаление. Блок настроек доступа внизу страницы не показывается.
+
+Смена логина и пароля доступна через API `PUT /api/admin/credentials` после входа. Новые данные сохраняются в PostgreSQL.
+
+`GET /api/leads` защищен Bearer token из `/api/admin/login`.
+
+Legacy fallback `X-Admin-Api-Key` пока оставлен для локальных API-проверок, но основной способ входа — логин/пароль через admin page.
 
 В `.env`:
 
@@ -284,11 +326,12 @@ ADMIN_API_KEY=change-me-admin-key
 Проверка:
 
 ```bash
-curl "http://localhost:8000/api/leads?client_id=notary_demo" \
-  -H "X-Admin-Api-Key: change-me-admin-key"
+curl -X POST "http://localhost:8000/api/admin/login" \
+  -H "Content-Type: application/json" \
+  -d '{"client_id":"notary_demo","username":"admin","password":"admin123"}'
 ```
 
-Важно: `POST /api/leads` остается публичным для виджета. Не храните `ADMIN_API_KEY` во frontend-коде, не вставляйте его в `widget/smart-form.js` и не публикуйте `.env` в GitHub.
+Важно: `POST /api/leads` остается публичным для виджета. Не храните admin credentials или `ADMIN_API_KEY` во frontend-коде и не публикуйте `.env` в GitHub.
 
 ## Как адаптировать под нового клиента
 
@@ -317,7 +360,8 @@ Python-код менять не нужно, если сценарий помещ
 ## Production notes
 
 - заменить `ADMIN_API_KEY` на длинный случайный ключ;
-- не хранить admin key во frontend;
+- заменить demo admin username/password;
+- не хранить admin credentials во frontend;
 - не публиковать `.env` в GitHub;
 - заменить email stub на SMTP или другой approved email provider;
 - настроить HTTPS;

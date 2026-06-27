@@ -9,6 +9,8 @@
   var mode = widgetConfig.mode || "floating";
   var containerId = widgetConfig.containerId || "smart-lead-form";
   var isEmbedded = mode === "embedded";
+  var existingLeadStorageKey = "smartLeadForm:" + clientId + ":lead";
+  var oneDayMs = 24 * 60 * 60 * 1000;
 
   var state = {
     config: null,
@@ -19,6 +21,8 @@
     stepHistory: [],
     answers: {},
     estimate: null,
+    existingLead: null,
+    isEditingExistingLead: false,
     isOpen: isEmbedded,
     screen: "welcome",
     error: "",
@@ -132,6 +136,76 @@
     return /^05\d{8}$/.test(cleaned) || /^\+9725\d{8}$/.test(cleaned) || /^9725\d{8}$/.test(cleaned);
   }
 
+  function validateContactTime(value) {
+    var rawValue = String(value || "");
+    var match = /(^|[^\d])([01]?\d|2[0-3]):([0-5]\d)(?!\d)/.exec(rawValue);
+    if (!match) {
+      return {
+        valid: false,
+        message: getText("time_error", "Пожалуйста, укажите время в формате ЧЧ:ММ, например: завтра в 12:30.")
+      };
+    }
+
+    var minutes = Number(match[2]) * 60 + Number(match[3]);
+    var targetDate = new Date();
+    var lowerValue = rawValue.toLowerCase();
+
+    if (lowerValue.indexOf("завтра") !== -1 || lowerValue.indexOf("tomorrow") !== -1 || lowerValue.indexOf("מחר") !== -1) {
+      targetDate.setDate(targetDate.getDate() + 1);
+    }
+
+    var day = targetDate.getDay();
+    if (day === 6) {
+      return {
+        valid: false,
+        message: getText("shabbat_closed_error", "Сейчас Шабат, офис закрыт. Мы свяжемся с вами на следующий рабочий день или укажите удобное время, например: завтра в 12:30.")
+      };
+    }
+
+    var opensAt = 9 * 60;
+    var closesAt = day === 5 ? 13 * 60 : 18 * 60;
+    if (minutes < opensAt || minutes > closesAt) {
+      return {
+        valid: false,
+        message: getText("office_closed_error", "В это время офис закрыт. Мы свяжемся с вами завтра в рабочее время или укажите другое удобное время.")
+      };
+    }
+
+    return { valid: true, message: "" };
+  }
+
+  function readExistingLead() {
+    try {
+      var data = JSON.parse(window.localStorage.getItem(existingLeadStorageKey) || "null");
+      if (!data || !data.createdAt) {
+        return null;
+      }
+      if (Date.now() - data.createdAt >= oneDayMs) {
+        window.localStorage.removeItem(existingLeadStorageKey);
+        return null;
+      }
+      return data;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function saveExistingLead(leadId) {
+    var data = {
+      id: leadId,
+      createdAt: state.existingLead && state.existingLead.createdAt ? state.existingLead.createdAt : Date.now(),
+      answers: state.answers,
+      estimate: state.estimate
+    };
+
+    state.existingLead = data;
+    try {
+      window.localStorage.setItem(existingLeadStorageKey, JSON.stringify(data));
+    } catch (error) {
+      // If localStorage is unavailable, the backend still has the saved lead.
+    }
+  }
+
   function formatEstimate(estimate) {
     var currency = estimate.currency || "₪";
 
@@ -154,6 +228,24 @@
   function openModal() {
     state.isOpen = true;
     render();
+  }
+
+  function openWidgetFromPage() {
+    if (isEmbedded) {
+      var target = document.getElementById(containerId);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      state.isOpen = true;
+      if (state.screen === "welcome") {
+        startForm();
+      } else {
+        render();
+      }
+      return;
+    }
+
+    openModal();
   }
 
   function closeModal() {
@@ -181,9 +273,40 @@
     state.estimate = null;
     state.error = "";
     state.isSubmitting = false;
+    state.isEditingExistingLead = false;
     state.screen = screen || "welcome";
     updateVisibleSteps();
     render();
+  }
+
+  function editExistingLead() {
+    if (!state.existingLead) {
+      resetForm("welcome");
+      return;
+    }
+
+    state.answers = Object.assign({}, state.existingLead.answers || {});
+    state.estimate = state.existingLead.estimate || null;
+    state.isEditingExistingLead = true;
+    state.screen = "question";
+    state.currentStepIndex = 0;
+    state.stepHistory = [];
+    state.error = "";
+    updateVisibleSteps();
+    render();
+  }
+
+  function resetDemoLead() {
+    try {
+      window.localStorage.removeItem(existingLeadStorageKey);
+    } catch (error) {
+      // Demo reset should still continue if browser storage is unavailable.
+    }
+
+    state.existingLead = null;
+    state.isEditingExistingLead = false;
+    resetForm("welcome");
+    openWidgetFromPage();
   }
 
   function cancelForm() {
@@ -250,6 +373,14 @@
       return;
     }
 
+    if (step.key === "preferred_contact_time") {
+      var contactTimeResult = validateContactTime(value);
+      if (!contactTimeResult.valid) {
+        setError(contactTimeResult.message);
+        return;
+      }
+    }
+
     state.answers[step.key] = value;
     state.error = "";
     goNext();
@@ -304,6 +435,10 @@
         state.visibleSteps = config.visible_steps || state.steps.filter(function (step) {
           return stepIsVisible(step, state.answers);
         });
+        state.existingLead = readExistingLead();
+        if (state.existingLead) {
+          state.screen = "existing";
+        }
         updateOpenButtonText();
         render();
       })
@@ -352,8 +487,12 @@
     state.error = "";
     render();
 
-    requestJson("/api/leads", {
-      method: "POST",
+    var existingLeadId = state.isEditingExistingLead && state.existingLead ? state.existingLead.id : null;
+    var requestPath = existingLeadId ? "/api/leads/" + encodeURIComponent(existingLeadId) : "/api/leads";
+    var requestMethod = existingLeadId ? "PUT" : "POST";
+
+    requestJson(requestPath, {
+      method: requestMethod,
       headers: {
         "Content-Type": "application/json"
       },
@@ -369,7 +508,7 @@
         documents_ready: state.answers.documents_ready || null,
         name: state.answers.name,
         phone: state.answers.phone,
-        email: state.answers.email || null,
+        email: null,
         preferred_contact_time: state.answers.preferred_contact_time || null,
         comment: state.answers.comment || null,
         estimated_price_min: state.estimate.estimated_price_min,
@@ -380,7 +519,9 @@
         answers: state.answers
       })
     })
-      .then(function () {
+      .then(function (response) {
+        saveExistingLead(response.id);
+        state.isEditingExistingLead = false;
         state.screen = "success";
         state.isSubmitting = false;
         render();
@@ -410,6 +551,29 @@
     startButton.type = "button";
     startButton.addEventListener("click", startForm);
     elements.footer.replaceChildren(startButton);
+  }
+
+  function renderExistingLead() {
+    var fragment = document.createDocumentFragment();
+    fragment.appendChild(createElement("h2", "slf-heading", getText("existing_request_title", "Заявка уже создана")));
+    fragment.appendChild(createElement("p", "slf-text", getText("existing_request_text", "Вы уже отправили заявку. Ее можно изменить, но новую заявку можно оформить только через сутки после отправки.")));
+
+    if (state.existingLead && state.existingLead.answers) {
+      var summary = createElement("div", "slf-summary");
+      addSummaryRow(summary, getSummaryLabel("service_type", "Услуга"), getLabel("service_type", state.existingLead.answers.service_type));
+      addSummaryRow(summary, getSummaryLabel("name", "Имя"), state.existingLead.answers.name || "-");
+      addSummaryRow(summary, getSummaryLabel("phone", "Телефон"), state.existingLead.answers.phone || "-");
+      addSummaryRow(summary, getSummaryLabel("preferred_contact_time", "Удобное время"), state.existingLead.answers.preferred_contact_time || "-");
+      fragment.appendChild(summary);
+    }
+
+    renderError(fragment);
+    elements.body.replaceChildren(fragment);
+
+    var editButton = createElement("button", "slf-button slf-button-primary", getText("edit_request_button_text", "Изменить заявку"));
+    editButton.type = "button";
+    editButton.addEventListener("click", editExistingLead);
+    elements.footer.replaceChildren(editButton);
   }
 
   function renderQuestion() {
@@ -450,6 +614,9 @@
       input.placeholder = step.placeholder || "";
       input.value = state.answers[step.key] || "";
       fragment.appendChild(input);
+      if (step.key === "preferred_contact_time") {
+        fragment.appendChild(createElement("p", "slf-hint", getText("working_hours_hint", "Рабочие часы: вс–чт 09:00–18:00, пт 09:00–13:00, суббота закрыто. Можно написать: завтра в 12:30.")));
+      }
     }
 
     renderError(fragment);
@@ -534,7 +701,6 @@
     addSummaryRow(summary, getSummaryLabel("documents_ready", "Документы"), getLabel("documents_ready", state.answers.documents_ready));
     addSummaryRow(summary, getSummaryLabel("name", "Имя"), state.answers.name || "-");
     addSummaryRow(summary, getSummaryLabel("phone", "Телефон"), state.answers.phone || "-");
-    addSummaryRow(summary, getSummaryLabel("email", "Email"), state.answers.email || "-");
     addSummaryRow(summary, getSummaryLabel("preferred_contact_time", "Удобное время"), state.answers.preferred_contact_time || "-");
     addSummaryRow(summary, getSummaryLabel("comment", "Комментарий"), state.answers.comment || "-");
 
@@ -542,25 +708,21 @@
     elements.body.replaceChildren(fragment);
 
     if (isEmbedded) {
-      var restartButton = createElement("button", "slf-button slf-button-primary", getText("new_request_button_text", "Новая заявка"));
-      restartButton.type = "button";
-      restartButton.addEventListener("click", function () {
-        resetForm("welcome");
-      });
-      elements.footer.replaceChildren(restartButton);
+      var editButton = createElement("button", "slf-button slf-button-primary", getText("edit_request_button_text", "Изменить заявку"));
+      editButton.type = "button";
+      editButton.addEventListener("click", editExistingLead);
+      elements.footer.replaceChildren(editButton);
       return;
     }
 
-    var restartButton = createElement("button", "slf-button", getText("new_request_button_text", "Новая заявка"));
-    restartButton.type = "button";
-    restartButton.addEventListener("click", function () {
-      resetForm("welcome");
-    });
+    var editButton = createElement("button", "slf-button", getText("edit_request_button_text", "Изменить заявку"));
+    editButton.type = "button";
+    editButton.addEventListener("click", editExistingLead);
 
     var closeButton = createElement("button", "slf-button slf-button-primary", getText("close_button_text", "Закрыть"));
     closeButton.type = "button";
     closeButton.addEventListener("click", closeModal);
-    elements.footer.replaceChildren(restartButton, closeButton);
+    elements.footer.replaceChildren(editButton, closeButton);
   }
 
   function renderLoading() {
@@ -606,6 +768,8 @@
       renderEstimate();
     } else if (state.screen === "success") {
       renderSuccess();
+    } else if (state.screen === "existing") {
+      renderExistingLead();
     }
   }
 
@@ -687,6 +851,8 @@
       return;
     }
 
+    window.addEventListener("smartlead:open", openWidgetFromPage);
+    window.addEventListener("smartlead:reset-demo", resetDemoLead);
     render();
     loadConfig();
   }

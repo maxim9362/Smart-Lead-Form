@@ -13,12 +13,17 @@ from app.schemas.lead import (
     LeadListResponse,
     LeadStatusUpdate,
     LeadStatusUpdateResponse,
+    LeadUpdateResponse,
 )
-from app.services.lead_service import create_lead, delete_lead, list_leads, update_lead_status
+from app.services.lead_service import create_lead, delete_lead, list_leads, update_lead, update_lead_status
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
 PHONE_ERROR_DETAIL = "Пожалуйста, укажите израильский номер телефона в формате 05XXXXXXXX или +972XXXXXXXXX."
+TIME_ERROR_DETAIL = "Пожалуйста, укажите время в формате ЧЧ:ММ, например: завтра в 12:30."
+OFFICE_CLOSED_DETAIL = "В это время офис закрыт. Мы свяжемся с вами завтра в рабочее время или укажите другое удобное время."
+SHABBAT_CLOSED_DETAIL = "Сейчас Шабат, офис закрыт. Мы свяжемся с вами на следующий рабочий день или укажите удобное время, например: завтра в 12:30."
+RECENT_LEAD_ERROR_DETAIL = "Заявка уже создана, ее можно изменить. Новую заявку можно оформить только через сутки."
 
 
 @router.post("", response_model=LeadCreateResponse)
@@ -28,6 +33,14 @@ def create_lead_endpoint(payload: LeadCreate, db: Session = Depends(get_db)) -> 
     except ValueError as exc:
         if str(exc) == "Invalid Israeli phone number":
             raise HTTPException(status_code=400, detail=PHONE_ERROR_DETAIL) from exc
+        if str(exc) == "Invalid contact time":
+            raise HTTPException(status_code=400, detail=TIME_ERROR_DETAIL) from exc
+        if str(exc) == "Office closed for time":
+            raise HTTPException(status_code=400, detail=OFFICE_CLOSED_DETAIL) from exc
+        if str(exc) == "Office closed for shabbat":
+            raise HTTPException(status_code=400, detail=SHABBAT_CLOSED_DETAIL) from exc
+        if str(exc) == "Recent lead already exists":
+            raise HTTPException(status_code=409, detail=RECENT_LEAD_ERROR_DETAIL) from exc
         raise
 
     return {
@@ -47,6 +60,30 @@ def list_leads_endpoint(
 ) -> dict:
     items, total = list_leads(db, client_id=client_id, limit=limit, offset=offset)
     return {"items": items, "total": total}
+
+
+@router.put("/{lead_id}", response_model=LeadUpdateResponse)
+def update_lead_endpoint(lead_id: int, payload: LeadCreate, db: Session = Depends(get_db)) -> dict:
+    try:
+        lead = update_lead(db, lead_id, payload)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="Заявка не найдена") from exc
+    except ValueError as exc:
+        if str(exc) == "Invalid Israeli phone number":
+            raise HTTPException(status_code=400, detail=PHONE_ERROR_DETAIL) from exc
+        if str(exc) == "Invalid contact time":
+            raise HTTPException(status_code=400, detail=TIME_ERROR_DETAIL) from exc
+        if str(exc) == "Office closed for time":
+            raise HTTPException(status_code=400, detail=OFFICE_CLOSED_DETAIL) from exc
+        if str(exc) == "Office closed for shabbat":
+            raise HTTPException(status_code=400, detail=SHABBAT_CLOSED_DETAIL) from exc
+        raise
+
+    return {
+        "id": lead.id,
+        "status": "updated",
+        "message": "Заявка обновлена",
+    }
 
 
 @router.patch("/{lead_id}/status", response_model=LeadStatusUpdateResponse)

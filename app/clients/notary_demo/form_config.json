@@ -231,18 +231,11 @@
       "placeholder": "Например: 0541234567"
     },
     {
-      "key": "email",
-      "question": "Email, если удобно получить ответ письмом",
-      "type": "email",
-      "required": false,
-      "placeholder": "example@email.com"
-    },
-    {
       "key": "preferred_contact_time",
-      "question": "Когда удобно связаться?",
+      "question": "Во сколько удобно связаться?",
       "type": "text",
       "required": true,
-      "placeholder": "Например: сегодня после 13:00"
+      "placeholder": "Например: завтра в 12:30"
     },
     {
       "key": "comment",
